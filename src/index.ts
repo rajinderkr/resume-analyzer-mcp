@@ -39,6 +39,9 @@ interface AnalysisResponse {
 const server = new mcp.Server({
   name: "resume-analyzer-mcp",
   version: "1.0.0",
+  capabilities: {
+    tools: {},
+  },
 });
 
 // Tool definitions
