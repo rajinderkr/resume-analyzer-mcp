@@ -129,9 +129,31 @@ app.get("/", (_: Request, res: Response) => {
   res.send("Resume Analyzer MCP Server Running");
 });
 
+const transports: { [sessionId: string]: SSEServerTransport } = {};
+
 app.get("/sse", async (req: Request, res: Response) => {
   const transport = new SSEServerTransport("/messages", res);
+
+  transports[transport.sessionId] = transport;
+
+  res.on("close", () => {
+    delete transports[transport.sessionId];
+  });
+
   await server.connect(transport);
+});
+
+app.post("/messages", async (req: Request, res: Response) => {
+  const sessionId = req.query.sessionId as string;
+
+  const transport = transports[sessionId];
+
+  if (!transport) {
+    res.status(400).send("No transport found");
+    return;
+  }
+
+  await transport.handlePostMessage(req, res);
 });
 
 const PORT = process.env.PORT || 3000;
