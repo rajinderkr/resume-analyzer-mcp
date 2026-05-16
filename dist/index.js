@@ -1,73 +1,54 @@
+#!/usr/bin/env node
 "use strict";
-// MCP Server for Resume Analyzer
-const mcp = require("@modelcontextprotocol/sdk/server/index.js");
-const { StdioServerTransport } = require("@modelcontextprotocol/sdk/server/stdio.js");
-const { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema, } = require("@modelcontextprotocol/sdk/types.js");
-// Configuration
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = __importDefault(require("express"));
+const cors_1 = __importDefault(require("cors"));
+const index_js_1 = require("@modelcontextprotocol/sdk/server/index.js");
+const sse_js_1 = require("@modelcontextprotocol/sdk/server/sse.js");
+const types_js_1 = require("@modelcontextprotocol/sdk/types.js");
+const app = (0, express_1.default)();
+app.use((0, cors_1.default)());
+app.use(express_1.default.json());
 const API_BASE_URL = "https://brainyscout.com/API";
 const API_ENDPOINT = `${API_BASE_URL}/rscoregpt`;
-// Initialize MCP server
-const server = new mcp.Server({
-    name: "resume-analyzer-mcp",
-    version: "1.0.0",
-});
-// Tool definitions
 const tools = [
     {
         name: "analyze_resume",
-        description: "Analyze a candidate resume against a target job description. Returns ATS match scores, skill analysis, missing keywords, and improvement recommendations.",
+        description: "Analyze a candidate resume against a target job description.",
         inputSchema: {
             type: "object",
             properties: {
                 resume: {
                     type: "string",
-                    description: "Full extracted text from the candidate resume",
                 },
                 jobDescription: {
                     type: "string",
-                    description: "Full target job description text",
                 },
                 email: {
                     type: "string",
-                    description: "Optional: Candidate email address",
                 },
             },
             required: ["resume", "jobDescription"],
         },
     },
 ];
-// Handler for listing tools
-server.setRequestHandler(ListToolsRequestSchema, async () => {
-    return {
-        tools: tools,
-    };
+const server = new index_js_1.Server({
+    name: "resume-analyzer-mcp",
+    version: "1.0.0",
+}, {
+    capabilities: {
+        tools: {},
+    },
 });
-// Handler for calling tools
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    if (request.params.name !== "analyze_resume") {
-        return {
-            isError: true,
-            content: [
-                {
-                    type: "text",
-                    text: `Unknown tool: ${request.params.name}`,
-                },
-            ],
-        };
-    }
-    const { resume, jobDescription, email } = request.params.arguments;
-    if (!resume || !jobDescription) {
-        return {
-            isError: true,
-            content: [
-                {
-                    type: "text",
-                    text: "Missing required parameters: resume and jobDescription",
-                },
-            ],
-        };
-    }
+server.setRequestHandler(types_js_1.ListToolsRequestSchema, async () => {
+    return { tools };
+});
+server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
     try {
+        const { resume, jobDescription, email } = request.params.arguments;
         const payload = {
             resume,
             jobDescription,
@@ -80,79 +61,37 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             },
             body: JSON.stringify(payload),
         });
-        if (!response.ok) {
-            return {
-                isError: true,
-                content: [
-                    {
-                        type: "text",
-                        text: `API error: ${response.status} ${response.statusText}`,
-                    },
-                ],
-            };
-        }
-        const data = await response.json();
-        // Format response for Claude
-        const summary = `
-**Resume vs Job Description Analysis**
-
-📊 **Overall Match Score:** ${data.overallMatchScore.toFixed(1)}%
-🔧 **Hard Skill Match:** ${data.hardSkillScore.toFixed(1)}%
-💬 **Soft Skill Match:** ${data.softSkillScore.toFixed(1)}%
-✅ **ATS Optimization:** ${data.atsOptimizationScore.toFixed(1)}%
-
-**Matched Skills:**
-${data.matchedSkills.map((s) => `• ${s}`).join("\n")}
-
-**Missing Skills:**
-${data.missingSkills.map((s) => `• ${s}`).join("\n")}
-
-**Missing Resume Sections:**
-${data.missingSections.map((s) => `• ${s}`).join("\n")}
-
-**Weak Keywords:**
-${data.weakKeywords.map((w) => `• ${w}`).join("\n")}
-
-**Top Recommendations:**
-${data.topRecommendations.map((r) => `• ${r}`).join("\n")}
-
-**Improved Resume Bullet:**
-${data.improvedResumeBullet}
-
-**Recruiter Summary:**
-${data.recruiterSummary}
-
-**Potential Interview Questions:**
-${data.interviewQuestions.map((q) => `• ${q}`).join("\n")}
-    `;
+        const data = (await response.json());
         return {
-            isError: false,
             content: [
                 {
                     type: "text",
-                    text: summary,
+                    text: JSON.stringify(data, null, 2),
                 },
             ],
         };
     }
     catch (error) {
-        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
         return {
             isError: true,
             content: [
                 {
                     type: "text",
-                    text: `Error calling Resume Analyzer API: ${errorMessage}`,
+                    text: String(error),
                 },
             ],
         };
     }
 });
-// Start server
-async function main() {
-    const transport = new StdioServerTransport();
+app.get("/", (_, res) => {
+    res.send("Resume Analyzer MCP Server Running");
+});
+app.get("/sse", async (req, res) => {
+    const transport = new sse_js_1.SSEServerTransport("/messages", res);
     await server.connect(transport);
-    console.error("Resume Analyzer MCP Server running on stdio");
-}
-main().catch(console.error);
+});
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`MCP Server running on port ${PORT}`);
+});
 //# sourceMappingURL=index.js.map
