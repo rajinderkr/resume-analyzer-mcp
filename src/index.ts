@@ -1,16 +1,15 @@
-// MCP Server for Resume Analyzer
+#!/usr/bin/env node
 
-const mcp = require("@modelcontextprotocol/sdk/server/index.js");
-const { StdioServerTransport } = require(
-  "@modelcontextprotocol/sdk/server/stdio.js"
-);
-const {
+import {
+  Server,
+  StdioServerTransport,
+} from "@modelcontextprotocol/sdk/server/index.js";
+import {
   CallToolRequestSchema,
-  ErrorCode,
   ListToolsRequestSchema,
-} = require("@modelcontextprotocol/sdk/types.js");
+  Tool,
+} from "@modelcontextprotocol/sdk/types.js";
 
-// Configuration
 const API_BASE_URL = "https://brainyscout.com/API";
 const API_ENDPOINT = `${API_BASE_URL}/rscoregpt`;
 
@@ -35,23 +34,27 @@ interface AnalysisResponse {
   interviewQuestions: string[];
 }
 
-// Initialize MCP server
-const server = new mcp.Server({
-  name: "resume-analyzer-mcp",
-  version: "1.0.0",
-  capabilities: {
-    tools: {},
+// Initialize server with tools capability
+const server = new Server(
+  {
+    name: "resume-analyzer-mcp",
+    version: "1.0.0",
   },
-});
+  {
+    capabilities: {
+      tools: {},
+    },
+  }
+);
 
-// Tool definitions
-const tools = [
+// Define tools
+const tools: Tool[] = [
   {
     name: "analyze_resume",
     description:
       "Analyze a candidate resume against a target job description. Returns ATS match scores, skill analysis, missing keywords, and improvement recommendations.",
     inputSchema: {
-      type: "object" as const,
+      type: "object",
       properties: {
         resume: {
           type: "string",
@@ -71,15 +74,13 @@ const tools = [
   },
 ];
 
-// Handler for listing tools
+// List tools handler
 server.setRequestHandler(ListToolsRequestSchema, async () => {
-  return {
-    tools: tools,
-  };
+  return { tools };
 });
 
-// Handler for calling tools
-server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
+// Call tool handler
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
   if (request.params.name !== "analyze_resume") {
     return {
       isError: true,
@@ -92,7 +93,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
     };
   }
 
-  const { resume, jobDescription, email } = request.params.arguments;
+  const { resume, jobDescription, email } = request.params.arguments as {
+    resume: string;
+    jobDescription: string;
+    email?: string;
+  };
 
   if (!resume || !jobDescription) {
     return {
@@ -133,9 +138,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
       };
     }
 
-    const data: AnalysisResponse = await response.json() as AnalysisResponse;
+    const data = (await response.json()) as AnalysisResponse;
 
-    // Format response for Claude
     const summary = `
 **Resume vs Job Description Analysis**
 
@@ -200,4 +204,7 @@ async function main() {
   console.error("Resume Analyzer MCP Server running on stdio");
 }
 
-main().catch(console.error);
+main().catch((error) => {
+  console.error("Server error:", error);
+  process.exit(1);
+});
