@@ -2,7 +2,6 @@
   "name": "resume-analyzer-mcp",
   "version": "1.0.0",
   "description": "MCP Server for Brainy Scout Resume Analyzer API",
-  "type": "module",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
